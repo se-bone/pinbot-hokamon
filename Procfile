@@ -1,0 +1,1 @@
+pinbot-hokamon: python ./pinbot_hoc
