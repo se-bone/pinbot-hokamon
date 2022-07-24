@@ -1,15 +1,12 @@
 from typing import Optional, Tuple
 import discord
-from discord import CategoryChannel, ForumChannel, StageChannel, TextChannel, VoiceChannel
+from discord import ForumChannel, TextChannel, CategoryChannel
 from utils import setup_logger
 from configs import Environments
 
 envs = Environments()
 
 logger = setup_logger(__name__)
-
-VocalGuildChannel = VoiceChannel | StageChannel
-GuildChannel = VocalGuildChannel | ForumChannel | TextChannel | CategoryChannel
 
 
 class Client(discord.Client):
@@ -25,7 +22,8 @@ class Client(discord.Client):
 client = Client()
 
 
-async def get_channel_and_message_from_payload(payload: discord.RawReactionActionEvent) -> Optional[Tuple[GuildChannel, discord.Message]]:
+async def get_channel_and_message_from_payload(payload: discord.RawReactionActionEvent) -> Optional[
+        Tuple[ForumChannel | TextChannel | CategoryChannel, discord.Message]]:
     if payload.guild_id is None:
         logger.error('The guild was not found.')
         return None
@@ -37,6 +35,10 @@ async def get_channel_and_message_from_payload(payload: discord.RawReactionActio
 
     channel = guild.get_channel(payload.channel_id)
     if channel is None:
+        return None
+
+    if not isinstance(channel, ForumChannel | TextChannel | CategoryChannel):
+        logger.error('Invalid channel type.')
         return None
 
     message = channel.get_partial_message(payload.message_id)
@@ -115,6 +117,12 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     if message.pinned:
         await channel.send(embed=discord.Embed(description='ピン留めを解除します。'))
         await message.unpin()
+
+"""
+TODO: スラッシュコマンドによるbotの説明を追加する。
+      おそらく、botの権限設定でスラッシュコマンドを有効にしたうえで
+      以下のコードのコメントアウトを外せば使えるようになる。
+"""
 
 # tree = app_commands.CommandTree(client)
 
