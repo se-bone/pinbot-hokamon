@@ -83,7 +83,9 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
     # 3つ目の :thumbsdown: が付いたタイミングでピン留めを解除する
     if added_emoji == '👎' and is_bad_message and message.pinned:
-        await channel.send(embed=discord.Embed(description="一定数の低評価が付けられたため、ピン留めを解除します。"))
+        await channel.send(embed=discord.Embed(
+            title='一定数の低評価が付いたため、ピン留めを解除しました',
+            description=f'["ここをクリックすると対象のメッセージに移動できます"]({message.jump_url})'))
         await message.unpin()
 
     if added_emoji == '📌' and not message.pinned and not is_bad_message:
@@ -115,7 +117,9 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
         return
 
     if message.pinned:
-        await channel.send(embed=discord.Embed(description='ピン留めを解除します。'))
+        await channel.send(embed=discord.Embed(
+            title='ピン留めを解除しました',
+            description=f'["ここをクリックすると対象のメッセージに移動できます"]({message.jump_url})'))
         await message.unpin()
 
 """
