@@ -78,10 +78,17 @@ async def get_message_from_payload(payload: RawReactionActionEvent) -> Optional[
         Optional[Message]: メッセージ
     """
     channel = get_text_channel_from_payload(payload)
-    if channel is None:
+    thread = get_thread_from_payload(payload)
+    if not (channel or thread):
         return None
 
-    partial_message = channel.get_partial_message(payload.message_id)
+    if channel:
+        partial_message = channel.get_partial_message(payload.message_id)
+    elif thread:
+        partial_message = thread.get_partial_message(payload.message_id)
+    else:
+        logger.error('Channel or thread was not found.')
+
     message = await partial_message.fetch()
 
     return message
