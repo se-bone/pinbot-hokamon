@@ -1,6 +1,6 @@
-from typing import Optional, Tuple
+from typing import Optional
 import discord
-from discord import ForumChannel, TextChannel, CategoryChannel
+from discord import Guild, Message, RawReactionActionEvent, TextChannel
 from utils import setup_logger
 from configs import Environments
 
@@ -22,8 +22,7 @@ class Client(discord.Client):
 client = Client()
 
 
-async def get_channel_and_message_from_payload(payload: discord.RawReactionActionEvent) -> Optional[
-        Tuple[ForumChannel | TextChannel | CategoryChannel, discord.Message]]:
+def get_guild_from_payload(payload: RawReactionActionEvent) -> Optional[Guild]:
     if payload.guild_id is None:
         logger.error('The guild was not found.')
         return None
@@ -33,41 +32,53 @@ async def get_channel_and_message_from_payload(payload: discord.RawReactionActio
         logger.error('The guild was not found.')
         return None
 
+    return guild
+
+
+def get_text_channel_from_payload(payload: RawReactionActionEvent) -> Optional[TextChannel]:
+    guild = get_guild_from_payload(payload)
+    if guild is None:
+        return None
+
     channel = guild.get_channel(payload.channel_id)
+    if channel is None:
+        logger.error('The channel was not found.')
+        return None
+
+    if not isinstance(channel, TextChannel):
+        logger.error('The channel is not TextChannel.')
+        return None
+
+    return channel
+
+
+async def get_message_from_payload(payload: RawReactionActionEvent) -> Optional[Message]:
+    channel = get_text_channel_from_payload(payload)
     if channel is None:
         return None
 
-    if not isinstance(channel, ForumChannel | TextChannel | CategoryChannel):
-        logger.error('Invalid channel type.')
-        return None
+    partial_message = channel.get_partial_message(payload.message_id)
+    message = await partial_message.fetch()
 
-    message = channel.get_partial_message(payload.message_id)
-    if message is None:
-        logger.error('The expected message was not found.')
-        channel.send(embed=discord.Embed(title='対象のメッセージが見つかりませんでした。'))
-        return None
-
-    target_message = await message.fetch()
-    return channel, target_message
+    return message
 
 
 @client.event
-async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+async def on_raw_reaction_add(payload: RawReactionActionEvent):
     logger.info(
         f'A reaction was added to the message, added: {payload.emoji}')
 
     added_emoji = str(payload.emoji)
 
     if not(added_emoji == '📌' or added_emoji == '👎'):
-        logger.info('The emoji is not pushpin.')
+        logger.info('The emoji is not pushpin or thumbsdown.')
         return
 
-    result = await get_channel_and_message_from_payload(payload)
-    if result is None:
-        logger.error('Channel or Message was not found.')
-        return
+    channel = get_text_channel_from_payload(payload)
+    message = await get_message_from_payload(payload)
 
-    channel, message = result
+    if not (message and channel):
+        return
 
     # :thumbsdown: が3つ以上付けられたメッセージはピン留めしない
     thumbsdown_reaction = [r for r in message.reactions if str(r) == '👎']
@@ -94,7 +105,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 
 
 @client.event
-async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
+async def on_raw_reaction_remove(payload: RawReactionActionEvent):
     logger.info(
         f'A reaction was removed from the message, removed: {payload.emoji}')
 
@@ -102,11 +113,11 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
         logger.info('The emoji is not pushpin.')
         return
 
-    result = await get_channel_and_message_from_payload(payload)
-    if result is None:
-        return
+    channel = get_text_channel_from_payload(payload)
+    message = await get_message_from_payload(payload)
 
-    channel, message = result
+    if not (channel and message):
+        return
 
     pin_reactions = [r for r in message.reactions if str(r) == '📌']
 
