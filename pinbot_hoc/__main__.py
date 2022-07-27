@@ -1,6 +1,6 @@
 from typing import Optional
 import discord
-from discord import Guild, Message, RawReactionActionEvent, TextChannel
+from discord import Guild, Message, RawReactionActionEvent, TextChannel, Thread
 from utils import setup_logger
 from configs import Environments
 
@@ -23,6 +23,14 @@ client = Client()
 
 
 def get_guild_from_payload(payload: RawReactionActionEvent) -> Optional[Guild]:
+    """ リアクションイベントからギルド(サーバ)を取得する
+
+    Args:
+        payload (RawReactionActionEvent): イベント発火時の情報
+
+    Returns:
+        Optional[Guild]: ギルド
+    """
     if payload.guild_id is None:
         logger.error('The guild was not found.')
         return None
@@ -36,6 +44,14 @@ def get_guild_from_payload(payload: RawReactionActionEvent) -> Optional[Guild]:
 
 
 def get_text_channel_from_payload(payload: RawReactionActionEvent) -> Optional[TextChannel]:
+    """ リアクションイベントからテキストチャンネルを取得する
+
+    Args:
+        payload (RawReactionActionEvent): イベント発火時の情報
+
+    Returns:
+        Optional[TextChannel]: チャンネル
+    """
     guild = get_guild_from_payload(payload)
     if guild is None:
         return None
@@ -53,6 +69,14 @@ def get_text_channel_from_payload(payload: RawReactionActionEvent) -> Optional[T
 
 
 async def get_message_from_payload(payload: RawReactionActionEvent) -> Optional[Message]:
+    """ リアクションイベントからメッセージを取得する
+
+    Args:
+        payload (RawReactionActionEvent): イベント発火時の情報
+
+    Returns:
+        Optional[Message]: メッセージ
+    """
     channel = get_text_channel_from_payload(payload)
     if channel is None:
         return None
@@ -61,6 +85,26 @@ async def get_message_from_payload(payload: RawReactionActionEvent) -> Optional[
     message = await partial_message.fetch()
 
     return message
+
+
+def get_thread(channel: TextChannel, message: Message) -> Optional[Thread]:
+    """ チャンネル内の、特定のメッセージを含むスレッドを取得する
+
+    Args:
+        channel (TextChannel): チャンネル
+        message (Message): メッセージ
+
+    Returns:
+        Optional[Thread]: スレッド
+    """
+    target_threads = [thread for thread in channel.threads if thread.get_partial_message(
+        message.id) is not None]
+
+    if len(target_threads) != 1:
+        logger.warning('Message is not in a thread.')
+        return None
+
+    return target_threads[0]
 
 
 @client.event
@@ -94,9 +138,16 @@ async def on_raw_reaction_add(payload: RawReactionActionEvent):
 
     # 3つ目の :thumbsdown: が付いたタイミングでピン留めを解除する
     if added_emoji == '👎' and is_bad_message and message.pinned:
-        await channel.send(embed=discord.Embed(
+        embed = discord.Embed(
             title='一定数の低評価が付いたため、ピン留めを解除しました',
-            description=f'[ここをクリックすると対象のメッセージに移動できます]({message.jump_url})'))
+            description=f'[ここをクリックすると対象のメッセージに移動できます]({message.jump_url})')
+
+        thread = get_thread(channel, message)
+        if thread:
+            await thread.send(embed=embed)
+        else:
+            await channel.send(embed=embed)
+
         await message.unpin()
 
     if added_emoji == '📌' and not message.pinned and not is_bad_message:
@@ -128,9 +179,16 @@ async def on_raw_reaction_remove(payload: RawReactionActionEvent):
         return
 
     if message.pinned:
-        await channel.send(embed=discord.Embed(
+        embed = discord.Embed(
             title='ピン留めを解除しました',
-            description=f'[ここをクリックすると対象のメッセージに移動できます]({message.jump_url})'))
+            description=f'[ここをクリックすると対象のメッセージに移動できます]({message.jump_url})')
+
+        thread = get_thread(channel, message)
+        if thread:
+            await thread.send(embed=embed)
+        else:
+            await channel.send(embed=embed)
+
         await message.unpin()
 
 """
