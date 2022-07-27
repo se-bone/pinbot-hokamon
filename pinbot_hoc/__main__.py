@@ -124,17 +124,12 @@ async def on_raw_reaction_add(payload: RawReactionActionEvent):
     message = await get_message_from_payload(payload)
 
     if not (message and (channel or thread)):
+        logger.error('No message, channel, or thread.')
         return
 
     guild = get_guild_from_payload(payload)
     if not guild:
         return
-
-    for t in guild.threads:
-        msg = t.get_partial_message(message.id)
-        logger.info(message.id)
-        if msg:
-            logger.info(f'{t.id}, {t.message_count}, {msg.id}')
 
     # :thumbsdown: が3つ以上付けられたメッセージはピン留めしない
     thumbsdown_reaction = [r for r in message.reactions if str(r) == '👎']
