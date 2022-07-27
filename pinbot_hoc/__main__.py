@@ -58,7 +58,7 @@ def get_text_channel_from_payload(payload: RawReactionActionEvent) -> Optional[T
 
     channel = guild.get_channel(payload.channel_id)
     if channel is None:
-        logger.error('The channel was not found.')
+        logger.info('The channel was not found. It may be thread_id')
         return None
 
     if not isinstance(channel, TextChannel):
@@ -87,24 +87,29 @@ async def get_message_from_payload(payload: RawReactionActionEvent) -> Optional[
     return message
 
 
-def get_thread(channel: TextChannel, message: Message) -> Optional[Thread]:
-    """ チャンネル内の、特定のメッセージを含むスレッドを取得する
+def get_thread_from_payload(payload: RawReactionActionEvent) -> Optional[Thread]:
+    """ リアクションイベントからスレッドを取得する
 
     Args:
-        channel (TextChannel): チャンネル
-        message (Message): メッセージ
+        payload (RawReactionActionEvent): イベント発火時の情報
 
     Returns:
         Optional[Thread]: スレッド
     """
-    target_threads = [thread for thread in channel.threads if thread.get_partial_message(
-        message.id) is not None]
-
-    if len(target_threads) != 1:
-        logger.warning('Message is not in a thread.')
+    guild = get_guild_from_payload(payload)
+    if guild is None:
         return None
 
-    return target_threads[0]
+    thread = guild.get_thread(payload.channel_id)
+    if thread is None:
+        logger.info('The thread was not found. It may be channel_id')
+        return None
+
+    if not isinstance(thread, TextChannel):
+        logger.error('The channel is not TextChannel.')
+        return None
+
+    return thread
 
 
 @client.event
@@ -119,9 +124,10 @@ async def on_raw_reaction_add(payload: RawReactionActionEvent):
         return
 
     channel = get_text_channel_from_payload(payload)
+    thread = get_thread_from_payload(payload)
     message = await get_message_from_payload(payload)
 
-    if not (message and channel):
+    if not (message and (channel or thread)):
         return
 
     # :thumbsdown: が3つ以上付けられたメッセージはピン留めしない
@@ -142,11 +148,13 @@ async def on_raw_reaction_add(payload: RawReactionActionEvent):
             title='一定数の低評価が付いたため、ピン留めを解除しました',
             description=f'[ここをクリックすると対象のメッセージに移動できます]({message.jump_url})')
 
-        thread = get_thread(channel, message)
         if thread:
             await thread.send(embed=embed)
-        else:
+        elif channel:
             await channel.send(embed=embed)
+        else:
+            logger.error('Something went wrong!!')
+            return
 
         await message.unpin()
 
@@ -165,9 +173,10 @@ async def on_raw_reaction_remove(payload: RawReactionActionEvent):
         return
 
     channel = get_text_channel_from_payload(payload)
+    thread = get_thread_from_payload(payload)
     message = await get_message_from_payload(payload)
 
-    if not (channel and message):
+    if not (message and (channel or message)):
         return
 
     pin_reactions = [r for r in message.reactions if str(r) == '📌']
@@ -183,11 +192,12 @@ async def on_raw_reaction_remove(payload: RawReactionActionEvent):
             title='ピン留めを解除しました',
             description=f'[ここをクリックすると対象のメッセージに移動できます]({message.jump_url})')
 
-        thread = get_thread(channel, message)
         if thread:
             await thread.send(embed=embed)
-        else:
+        elif channel:
             await channel.send(embed=embed)
+        else:
+            logger.error('Something went wrong!!')
 
         await message.unpin()
 
