@@ -105,10 +105,6 @@ def get_thread_from_payload(payload: RawReactionActionEvent) -> Optional[Thread]
         logger.info('The thread was not found. It may be channel_id')
         return None
 
-    if not isinstance(thread, TextChannel):
-        logger.error('The channel is not TextChannel.')
-        return None
-
     return thread
 
 
